@@ -1,4 +1,5 @@
 # macOS build artifacts
+build/
 rastertocarps
 mf3110usb
 carps-decode

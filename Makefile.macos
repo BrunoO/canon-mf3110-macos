@@ -15,6 +15,7 @@ PPD_NAME       ?= mf3110.ppd
 FILTER_NAME    ?= rastertocarps
 SDK            := $(shell xcrun --show-sdk-path)
 MACOS_DIR      ?= ./macos
+BUILD_DIR      ?= ./build
 WORK_TMP       ?= ./tmp
 
 # Homebrew static libs (no dylibs in CUPS filter sandbox)
@@ -32,17 +33,19 @@ LDFLAGS = $(TIFF_LIB) $(ZSTD_LIB) $(LZMA_LIB) $(JPEG_LIB) -lpthread -lz -lcupsim
 
 all: build
 
-build: $(FILTER_NAME) $(BACKEND_NAME) ppd/$(PPD_NAME)
+build: $(BUILD_DIR)/$(FILTER_NAME) $(BUILD_DIR)/$(BACKEND_NAME) ppd/$(PPD_NAME)
 	@echo "Build complete."
 
-$(FILTER_NAME): rastertocarps.c carps.h
+$(BUILD_DIR)/$(FILTER_NAME): rastertocarps.c carps.h
+	mkdir -p $(BUILD_DIR)
 	clang $(CFLAGS) -D__APPLE__ -o $@ rastertocarps.c $(LDFLAGS)
-	@echo "Built $(FILTER_NAME) (no Homebrew dylibs)"
+	@echo "Built $@ (no Homebrew dylibs)"
 	@otool -L $@ | grep -i homebrew && echo "WARNING: Homebrew dylib found!" || echo "OK: no Homebrew dylibs"
 
-$(BACKEND_NAME): $(MACOS_DIR)/mf3110usb.c
+$(BUILD_DIR)/$(BACKEND_NAME): $(MACOS_DIR)/mf3110usb.c
+	mkdir -p $(BUILD_DIR)
 	clang -O2 -Wall -Wextra -o $@ $(MACOS_DIR)/mf3110usb.c -framework IOKit -framework CoreFoundation
-	@echo "Built $(BACKEND_NAME) (IOKit backend)"
+	@echo "Built $@ (IOKit backend)"
 
 ppd/$(PPD_NAME): carps.drv
 	ppdc carps.drv
@@ -59,10 +62,10 @@ ppd/$(PPD_NAME): carps.drv
 install: build
 	@echo "Installing filter + PPD to $(INSTALL_DIR)..."
 	sudo mkdir -p $(INSTALL_DIR)
-	sudo install -m 755 $(FILTER_NAME) $(INSTALL_DIR)/$(FILTER_NAME)
+	sudo install -m 755 $(BUILD_DIR)/$(FILTER_NAME) $(INSTALL_DIR)/$(FILTER_NAME)
 	sudo install -m 644 ppd/$(PPD_NAME) $(INSTALL_DIR)/$(PPD_NAME)
 	@echo "Installing backend to $(BACKEND_DIR)..."
-	sudo install -o root -g wheel -m 700 $(BACKEND_NAME) $(BACKEND_DIR)/$(BACKEND_NAME)
+	sudo install -o root -g wheel -m 700 $(BUILD_DIR)/$(BACKEND_NAME) $(BACKEND_DIR)/$(BACKEND_NAME)
 	@echo "Installing LaunchDaemon $(PLIST_NAME)..."
 	sudo launchctl bootout system/$(basename $(PLIST_NAME)) 2>/dev/null || true
 	sudo install -o root -g wheel -m 644 $(MACOS_DIR)/$(PLIST_NAME) $(PLIST_DIR)/$(PLIST_NAME)
@@ -88,7 +91,7 @@ probe:
 
 status:
 	@echo "=== Build artifacts ==="
-	@ls -la $(FILTER_NAME) $(BACKEND_NAME) ppd/$(PPD_NAME) 2>/dev/null || echo "(not built)"
+	@ls -la $(BUILD_DIR)/$(FILTER_NAME) $(BUILD_DIR)/$(BACKEND_NAME) ppd/$(PPD_NAME) 2>/dev/null || echo "(not built)"
 	@echo "=== Installed files ==="
 	@ls -la $(INSTALL_DIR)/ 2>/dev/null || echo "(not installed)"
 	@ls -la $(BACKEND_DIR)/$(BACKEND_NAME) 2>/dev/null || echo "(backend not installed)"
@@ -96,7 +99,7 @@ status:
 	@lpstat -p $(PRINTER_NAME) 2>/dev/null || echo "(queue not found)"
 	@lpoptions -p $(PRINTER_NAME) 2>/dev/null | tr ' ' '\n' | grep -iE 'device-uri|PageSize|MediaType' || true
 	@echo "=== Filter dylibs ==="
-	@otool -L $(INSTALL_DIR)/$(FILTER_NAME) 2>/dev/null || otool -L $(FILTER_NAME) 2>/dev/null
+	@otool -L $(INSTALL_DIR)/$(FILTER_NAME) 2>/dev/null || otool -L $(BUILD_DIR)/$(FILTER_NAME) 2>/dev/null
 
 test: print-test
 
@@ -111,6 +114,7 @@ revert-stock:
 	@echo "Queue now uses stock USB backend."
 
 clean:
+	rm -rf $(BUILD_DIR)
 	rm -f $(FILTER_NAME) $(BACKEND_NAME) carps-decode
 	rm -f ppd/*.ppd
 	@echo "Cleaned build artifacts."
