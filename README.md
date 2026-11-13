@@ -1,3 +1,5 @@
+> **macOS (Apple Silicon & Intel):** Native direct-USB driver for the **Canon MF3110** (`rastertocarps` + IOKit `mf3110usb` daemon). See **[README.macos.md](README.macos.md)** for setup (`./install-macos.sh`).
+
 CUPS driver for Canon CARPS printers
 ====================================
 
