@@ -150,6 +150,7 @@ void dict_add(u8 byte, u8 *dict) {
 	dict[0] = byte;
 }
 
+#if !defined(__APPLE__)
 int fls(unsigned int n) {
 	int i = 0;
 
@@ -158,6 +159,7 @@ int fls(unsigned int n) {
 
 	return i;
 }
+#endif
 
 int encode_number(char **data, u16 *len, u8 *bitpos, int num) {
 	int num_bits;

@@ -1,0 +1,108 @@
+# macOS-specific build/install for Canon MF3110 CARPS driver
+# Usage: make -f Makefile.macos <target>
+# Targets: all, build, install, uninstall, probe, test, clean, status
+
+# ---- Config ----
+PRINTER_NAME   ?= Canon_MF3110
+DEVICE_URI     ?= mf3110usb:/Canon/MF3110?serial=235AT2134669
+STOCK_URI      ?= usb://Canon/MF3110?serial=235AT2134669
+INSTALL_DIR    ?= /Library/Printers/CARPS
+BACKEND_DIR    ?= /usr/libexec/cups/backend
+BACKEND_NAME   ?= mf3110usb
+PPD_NAME       ?= mf3110.ppd
+FILTER_NAME    ?= rastertocarps
+SDK            := $(shell xcrun --show-sdk-path)
+WORK_TMP       ?= ./tmp
+
+# Homebrew static libs (no dylibs in CUPS filter sandbox)
+TIFF_LIB  = /opt/homebrew/opt/libtiff/lib/libtiff.a
+ZSTD_LIB  = /opt/homebrew/opt/zstd/lib/libzstd.a
+LZMA_LIB  = /opt/homebrew/opt/xz/lib/liblzma.a
+JPEG_LIB  = /opt/homebrew/opt/jpeg-turbo/lib/libjpeg.a
+
+CFLAGS  = -Wall -Wextra -O2 -isysroot $(SDK) -I/opt/homebrew/opt/libtiff/include -I/opt/homebrew/opt/zstd/include -I/opt/homebrew/opt/xz/include -I/opt/homebrew/opt/jpeg-turbo/include
+LDFLAGS = $(TIFF_LIB) $(ZSTD_LIB) $(LZMA_LIB) $(JPEG_LIB) -lpthread -lz -lcupsimage -lcups
+
+# ---- Targets ----
+.PHONY: all build install uninstall probe test print-test clean status revert-stock
+
+all: build
+
+build: $(FILTER_NAME) $(BACKEND_NAME) ppd/$(PPD_NAME)
+	@echo "Build complete."
+
+$(FILTER_NAME): rastertocarps.c carps.h
+	clang $(CFLAGS) -D__APPLE__ -o $@ rastertocarps.c $(LDFLAGS)
+	@echo "Built $(FILTER_NAME) (no Homebrew dylibs)"
+	@otool -L $@ | grep -i homebrew && echo "WARNING: Homebrew dylib found!" || echo "OK: no Homebrew dylibs"
+
+$(BACKEND_NAME): $(WORK_TMP)/mf3110usb.c
+	clang -O2 -Wall -o $@ $(WORK_TMP)/mf3110usb.c -framework IOKit -framework CoreFoundation
+	@echo "Built $(BACKEND_NAME) (IOKit backend)"
+
+ppd/$(PPD_NAME): carps.drv
+	ppdc carps.drv
+	# Patch cupsFilter to use absolute path (filter is in /Library/Printers/CARPS, not standard filter dir)
+	sed -i '' 's|\*cupsFilter: "application/vnd.cups-raster 100 rastertocarps"|\*cupsFilter: "application/vnd.cups-raster 100 /Library/Printers/CARPS/rastertocarps"|' ppd/$(PPD_NAME)
+	@echo "Generated PPDs (patched cupsFilter to absolute path)"
+
+install: build
+	@echo "Installing filter + PPD to $(INSTALL_DIR)..."
+	sudo mkdir -p $(INSTALL_DIR)
+	sudo install -m 755 $(FILTER_NAME) $(INSTALL_DIR)/$(FILTER_NAME)
+	sudo install -m 644 ppd/$(PPD_NAME) $(INSTALL_DIR)/$(PPD_NAME)
+	@echo "Installing backend to $(BACKEND_DIR)..."
+	sudo install -o root -g wheel -m 700 $(BACKEND_NAME) $(BACKEND_DIR)/$(BACKEND_NAME)
+	@echo "Setting up CUPS queue..."
+	sudo lpadmin -p $(PRINTER_NAME) -E -v "$(DEVICE_URI)" -P $(INSTALL_DIR)/$(PPD_NAME) -D "Canon MF3110 (CARPS)" -L "USB" 2>/dev/null || \
+		sudo lpadmin -p $(PRINTER_NAME) -v "$(DEVICE_URI)" -P $(INSTALL_DIR)/$(PPD_NAME)
+	sudo lpadmin -p $(PRINTER_NAME) -o PageSize=A4 -o media=A4
+	@echo "Install complete. Queue: $(PRINTER_NAME) -> $(DEVICE_URI)"
+
+uninstall:
+	@echo "Removing installed files..."
+	sudo rm -f $(INSTALL_DIR)/$(FILTER_NAME) $(INSTALL_DIR)/$(PPD_NAME)
+	sudo rm -f $(BACKEND_DIR)/$(BACKEND_NAME)
+	sudo lpadmin -x $(PRINTER_NAME) 2>/dev/null || true
+	@echo "Uninstall complete."
+
+probe:
+	@echo "Probing USB device..."
+	sudo $(BACKEND_DIR)/$(BACKEND_NAME) probe
+
+status:
+	@echo "=== Build artifacts ==="
+	@ls -la $(FILTER_NAME) $(BACKEND_NAME) ppd/$(PPD_NAME) 2>/dev/null || echo "(not built)"
+	@echo "=== Installed files ==="
+	@ls -la $(INSTALL_DIR)/ 2>/dev/null || echo "(not installed)"
+	@ls -la $(BACKEND_DIR)/$(BACKEND_NAME) 2>/dev/null || echo "(backend not installed)"
+	@echo "=== CUPS queue ==="
+	@lpstat -p $(PRINTER_NAME) 2>/dev/null || echo "(queue not found)"
+	@lpoptions -p $(PRINTER_NAME) 2>/dev/null | tr ' ' '\n' | grep -iE 'device-uri|PageSize|MediaType' || true
+	@echo "=== Filter dylibs ==="
+	@otool -L $(INSTALL_DIR)/$(FILTER_NAME) 2>/dev/null || otool -L $(FILTER_NAME) 2>/dev/null
+
+test: print-test
+
+print-test:
+	@echo "Printing test page (A4)..."
+	echo "MF3110 test $$(date)" | lp -d $(PRINTER_NAME) -o PageSize=A4 -o media=A4
+	@echo "Job submitted. Check: lpstat -o $(PRINTER_NAME)"
+
+revert-stock:
+	@echo "Reverting queue to stock USB backend..."
+	sudo lpadmin -p $(PRINTER_NAME) -v "$(STOCK_URI)" -E
+	@echo "Queue now uses stock USB backend."
+
+clean:
+	rm -f $(FILTER_NAME) $(BACKEND_NAME) carps-decode
+	rm -f ppd/*.ppd
+	@echo "Cleaned build artifacts."
+
+# Quick log capture for last job
+log:
+	@JOB=$$( { lpstat -o $(PRINTER_NAME) 2>/dev/null; lpstat -W completed -o $(PRINTER_NAME) 2>/dev/null; } | awk '{print $$1}' | sed 's/.*-//' | sort -rn | head -n 1); \
+	echo "Last completed job: $$JOB"; \
+	sudo awk -v j="\\[Job $$JOB\\]" '$$0~j' /var/log/cups/error_log > $(WORK_TMP)/job_$${JOB}_custom.log; \
+	echo "Saved to $(WORK_TMP)/job_$${JOB}_custom.log"; \
+	grep '$(BACKEND_NAME)' $(WORK_TMP)/job_$${JOB}_custom.log

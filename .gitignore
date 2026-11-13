@@ -1,0 +1,9 @@
+# macOS build artifacts
+rastertocarps
+mf3110usb
+carps-decode
+ppd/*.ppd
+
+# Temp files
+tmp/*.log
+tmp/*.carps
