@@ -44,6 +44,19 @@ make -f Makefile.macos uninstall
 - `make -f Makefile.macos probe` — probe USB interfaces and endpoints on the connected MF3110
 - `make -f Makefile.macos log` — capture the last CUPS job log for `Canon_MF3110`
 
+## Troubleshooting
+
+- **Check daemon logs & USB status:**
+  ```sh
+  tail -n 50 /var/log/mf3110usb-daemon.log
+  make -f Makefile.macos probe
+  ```
+- **Reset CUPS queue and restart the `mf3110usb` daemon:**
+  ```sh
+  sudo bash ./macos/clean-slate.sh
+  ```
+- **Printer wedged after a power-off or failed job:** Power-cycle the printer; the daemon automatically detects stale USB handles via `GET_PORT_STATUS` on the next job and re-opens the device.
+
 ## Credits & License
 
 - **CARPS filter & protocol:** [ondrej-zary/carps-cups](https://github.com/ondrej-zary/carps-cups) (GPL-3.0)

@@ -1,0 +1,43 @@
+name: macOS Build & CARPS Round-Trip
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Homebrew static libraries
+        run: brew install libtiff zstd xz jpeg-turbo
+
+      - name: Build macOS filter, USB backend, and PPD
+        run: make -f Makefile.macos build
+
+      - name: Verify rastertocarps has no Homebrew dynamic dependencies
+        run: |
+          otool -L build/rastertocarps
+          ! otool -L build/rastertocarps | grep -qi homebrew
+
+      - name: Verify CARPS encoding round-trip (cupsfilter -> rastertocarps -> carps-decode)
+        run: |
+          clang -O2 -Wall -o build/carps-decode carps-decode.c
+          head -n 45 Makefile.macos > /tmp/ci-input.txt
+          PPD=./ppd/mf3110.ppd /usr/sbin/cupsfilter -p ./ppd/mf3110.ppd \
+            -m application/vnd.cups-raster -o PageSize=A4 -o media=A4 /tmp/ci-input.txt \
+            | PPD=./ppd/mf3110.ppd ./build/rastertocarps 1 ci "CI Test" 1 "" > /tmp/ci-out.carps
+          ./build/carps-decode /tmp/ci-out.carps > /tmp/ci-decode.txt
+          rm -f decoded-*.pbm /tmp/ci-input.txt /tmp/ci-out.carps
+          underflows=$(grep -c "DATA UNDERFLOW" /tmp/ci-decode.txt || true)
+          unknowns=$(grep -c "UNKNOWN COMPRESSION" /tmp/ci-decode.txt || true)
+          strips=$(grep -c "strip end marker" /tmp/ci-decode.txt || true)
+          rm -f /tmp/ci-decode.txt
+          echo "underflows=$underflows unknowns=$unknowns strips=$strips"
+          test "$underflows" -eq 0
+          test "$unknowns" -eq 0
+          test "$strips" -gt 0
