@@ -26,12 +26,12 @@
 
 ## Project Files
 
-- [Makefile.macos](Makefile.macos) — macOS build/install/probe/status/clean automation (`./build/` output)
-- [install-macos.sh](install-macos.sh) — one-command build and install
-- [README.macos.md](README.macos.md) — setup, usage, and troubleshooting
-- [macos/ARCHITECTURE.md](macos/ARCHITECTURE.md) — pipeline diagram, USB layout, and design details
-- [macos/mf3110usb.c](macos/mf3110usb.c) — custom IOKit USB backend & LaunchDaemon (`GPL-3.0-or-later`)
-- [macos/com.carps.mf3110usb.plist](macos/com.carps.mf3110usb.plist) — LaunchDaemon definition
-- [macos/clean-slate.sh](macos/clean-slate.sh) — queue/daemon reset helper
-- [rastertocarps.c](rastertocarps.c) — CARPS filter source (`carps_fls()` fix for macOS)
-- [.github/workflows/macos.yml](.github/workflows/macos.yml) — macOS CI build and CARPS round-trip test
+- [Makefile.macos](../Makefile.macos) — macOS build/install/probe/status/clean automation (`./build/` output)
+- [install-macos.sh](../install-macos.sh) — one-command build and install
+- [README.macos.md](../README.macos.md) — setup, usage, and troubleshooting
+- [ARCHITECTURE.md](ARCHITECTURE.md) — pipeline diagram, USB layout, and design details
+- [mf3110usb.c](mf3110usb.c) — custom IOKit USB backend & LaunchDaemon (`GPL-3.0-or-later`)
+- [com.carps.mf3110usb.plist](com.carps.mf3110usb.plist) — LaunchDaemon definition
+- [clean-slate.sh](clean-slate.sh) — queue/daemon reset helper
+- [rastertocarps.c](../rastertocarps.c) — CARPS filter source (`carps_fls()` fix for macOS)
+- [.github/workflows/macos.yml](../.github/workflows/macos.yml) — macOS CI build and CARPS round-trip test
