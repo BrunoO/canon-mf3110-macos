@@ -9,6 +9,8 @@ STOCK_URI      ?= usb://Canon/MF3110?serial=235AT2134669
 INSTALL_DIR    ?= /Library/Printers/CARPS
 BACKEND_DIR    ?= /usr/libexec/cups/backend
 BACKEND_NAME   ?= mf3110usb
+PLIST_NAME     ?= com.carps.mf3110usb.plist
+PLIST_DIR      ?= /Library/LaunchDaemons
 PPD_NAME       ?= mf3110.ppd
 FILTER_NAME    ?= rastertocarps
 SDK            := $(shell xcrun --show-sdk-path)
@@ -42,9 +44,15 @@ $(BACKEND_NAME): $(WORK_TMP)/mf3110usb.c
 
 ppd/$(PPD_NAME): carps.drv
 	ppdc carps.drv
-	# Patch cupsFilter to use absolute path (filter is in /Library/Printers/CARPS, not standard filter dir)
+	# Patch cupsFilter to absolute path, fix -1 HWMargins / full-bleed A4 ImageableArea, and default to A4
 	sed -i '' 's|\*cupsFilter: "application/vnd.cups-raster 100 rastertocarps"|\*cupsFilter: "application/vnd.cups-raster 100 /Library/Printers/CARPS/rastertocarps"|' ppd/$(PPD_NAME)
-	@echo "Generated PPDs (patched cupsFilter to absolute path)"
+	sed -i '' 's|\*HWMargins: -1 -1 -1 -1|\*HWMargins: 14.25 14.25 14.25 14.25|' ppd/$(PPD_NAME)
+	sed -i '' 's|\*ImageableArea A4/A4: "0 0 595 842"|\*ImageableArea A4/A4: "14.25 14.25 580.75 827.75"|' ppd/$(PPD_NAME)
+	sed -i '' 's|\*DefaultPageSize: Letter|\*DefaultPageSize: A4|' ppd/$(PPD_NAME)
+	sed -i '' 's|\*DefaultPageRegion: Letter|\*DefaultPageRegion: A4|' ppd/$(PPD_NAME)
+	sed -i '' 's|\*DefaultImageableArea: Letter|\*DefaultImageableArea: A4|' ppd/$(PPD_NAME)
+	sed -i '' 's|\*DefaultPaperDimension: Letter|\*DefaultPaperDimension: A4|' ppd/$(PPD_NAME)
+	@echo "Generated PPDs (patched cupsFilter, 14.25pt margins, A4 default)"
 
 install: build
 	@echo "Installing filter + PPD to $(INSTALL_DIR)..."
@@ -53,6 +61,10 @@ install: build
 	sudo install -m 644 ppd/$(PPD_NAME) $(INSTALL_DIR)/$(PPD_NAME)
 	@echo "Installing backend to $(BACKEND_DIR)..."
 	sudo install -o root -g wheel -m 700 $(BACKEND_NAME) $(BACKEND_DIR)/$(BACKEND_NAME)
+	@echo "Installing LaunchDaemon $(PLIST_NAME)..."
+	sudo launchctl bootout system/$(basename $(PLIST_NAME)) 2>/dev/null || true
+	sudo install -o root -g wheel -m 644 $(WORK_TMP)/$(PLIST_NAME) $(PLIST_DIR)/$(PLIST_NAME)
+	sudo launchctl bootstrap system $(PLIST_DIR)/$(PLIST_NAME)
 	@echo "Setting up CUPS queue..."
 	sudo lpadmin -p $(PRINTER_NAME) -E -v "$(DEVICE_URI)" -P $(INSTALL_DIR)/$(PPD_NAME) -D "Canon MF3110 (CARPS)" -L "USB" 2>/dev/null || \
 		sudo lpadmin -p $(PRINTER_NAME) -v "$(DEVICE_URI)" -P $(INSTALL_DIR)/$(PPD_NAME)
@@ -60,7 +72,9 @@ install: build
 	@echo "Install complete. Queue: $(PRINTER_NAME) -> $(DEVICE_URI)"
 
 uninstall:
-	@echo "Removing installed files..."
+	@echo "Removing LaunchDaemon and installed files..."
+	sudo launchctl bootout system/$(basename $(PLIST_NAME)) 2>/dev/null || true
+	sudo rm -f $(PLIST_DIR)/$(PLIST_NAME) /var/run/mf3110usb.sock
 	sudo rm -f $(INSTALL_DIR)/$(FILTER_NAME) $(INSTALL_DIR)/$(PPD_NAME)
 	sudo rm -f $(BACKEND_DIR)/$(BACKEND_NAME)
 	sudo lpadmin -x $(PRINTER_NAME) 2>/dev/null || true

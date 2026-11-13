@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.carps.mf3110usb</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/libexec/cups/backend/mf3110usb</string>
+		<string>--daemon</string>
+		<string>/var/run/mf3110usb.sock</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>/var/log/mf3110usb-daemon.log</string>
+</dict>
+</plist>

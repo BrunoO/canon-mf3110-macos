@@ -150,8 +150,7 @@ void dict_add(u8 byte, u8 *dict) {
 	dict[0] = byte;
 }
 
-#if !defined(__APPLE__)
-int fls(unsigned int n) {
+static int carps_fls(unsigned int n) {
 	int i = 0;
 
 	while (n >>= 1)
@@ -159,7 +158,6 @@ int fls(unsigned int n) {
 
 	return i;
 }
-#endif
 
 int encode_number(char **data, u16 *len, u8 *bitpos, int num) {
 	int num_bits;
@@ -176,7 +174,7 @@ int encode_number(char **data, u16 *len, u8 *bitpos, int num) {
 		return 2;
 	}
 
-	num_bits = fls(num);
+	num_bits = carps_fls(num);
 	DBG("num_bits=%d\n", num_bits);
 	if (num_bits == 1) {
 		put_bits(data, len, bitpos, 2, 0b01);

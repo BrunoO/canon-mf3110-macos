@@ -1,15 +1,16 @@
 # Canon MF3110 macOS Driver — Status & Findings
 
 ## Current State
-- **Filter pipeline:** ✅ Working. `cgtexttopdf → cgpdftoraster → rastertocarps` all complete with no errors. Produces valid CARPS data (A4 595×842 @ 600dpi).
-- **Custom USB backend:** ✅ Working at API level. Opens, seizes interface 1 (7/1/2), writes all bytes to bulk-OUT ep 0x04. Exits with no errors.
-- **Printer output:** ❌ **Not printing.** Printer receives data but ignores it. No panel errors, no paper movement.
+- **Filter pipeline (`rastertocarps`):** ✅ Fixed & working. `cgtexttopdf → cgpdftoraster → rastertocarps` produces valid CARPS data (verified with `carps-decode`, 0 underflows/errors). Fixed a critical bug where `#if !defined(__APPLE__)` around `fls()` caused `encode_number()` to call macOS `<strings.h>` `fls(int)` (1-indexed) instead of `rastertocarps.c`'s 0-indexed `fls(unsigned int)`, corrupting run-lengths `>= 2` on non-trivial pages (e.g., Notes.app); renamed to `static int carps_fls(unsigned int)`.
+- **PPD margins (`mf3110.ppd`):** ✅ Fixed. `ppdc` generated `*HWMargins: -1 -1 -1 -1` and full-bleed `"0 0 595 842"` (`4958px` wide), which caused an LCD paper-format error (`status=0x10`). Patched to `14.25pt` margins (`4721px` wide) and A4 default.
+- **Custom USB backend + LaunchDaemon (`mf3110usb`):** ✅ Working. Persistent daemon (`com.carps.mf3110usb.plist`, socket `/var/run/mf3110usb.sock`) keeps USB interface 1 open across jobs, runs `GET_DEVICE_ID` + `GET_PORT_STATUS`, calls `ClearPipeStallBothEnds` before each job, writes in `4096`-byte chunks, reads filtered CARPS from `stdin` (`argc >= 6`), and syncs an 8s post-job cooldown via `shutdown(SHUT_WR)` + EOF.
+- **Printer output:** ✅ **Working (CLI `lp`, consecutive jobs, and GUI apps such as Notes.app verified).**
 
 ## What Was Tried
 
 ### 1. Filter Build & Installation
 - Rebuilt `rastertocarps` with no Homebrew dylibs (static-linked libtiff, zstd, lzma, jpeg). Resolved sandbox crash (`dyld: Library not loaded: libtiff.6.dylib`).
-- Guarded `fls(unsigned int)` with `#if !defined(__APPLE__)` to avoid conflict with system `fls(int)`.
+- Initially guarded `fls(unsigned int)` with `#if !defined(__APPLE__)`, which exposed a 0-indexed vs 1-indexed mismatch with `<strings.h>` `fls(int)` (1 extra bit per `encode_number(num >= 2)`). Replaced with `static int carps_fls(unsigned int)`.
 - Installed filter + PPD in `/Library/Printers/CARPS` (SIP-safe). Absolute `*cupsFilter` path in PPD.
 - **Result:** Filter pipeline works. No CUPS errors.
 
