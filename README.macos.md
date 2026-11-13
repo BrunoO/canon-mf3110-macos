@@ -15,7 +15,7 @@ See **[macos/ARCHITECTURE.md](macos/ARCHITECTURE.md)** for the full pipeline dia
 - Xcode Command Line Tools (`xcode-select --install`)
 - [Homebrew](https://brew.sh) static libraries (used at build time only):
   ```sh
-  brew install libtiff zstd xz jpeg-turbo
+  brew install libtiff zstd xz jpeg-turbo webp
   ```
 
 ## Build & Install

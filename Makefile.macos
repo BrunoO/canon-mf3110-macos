@@ -24,9 +24,10 @@ TIFF_LIB  = $(BREW_PREFIX)/opt/libtiff/lib/libtiff.a
 ZSTD_LIB  = $(BREW_PREFIX)/opt/zstd/lib/libzstd.a
 LZMA_LIB  = $(BREW_PREFIX)/opt/xz/lib/liblzma.a
 JPEG_LIB  = $(BREW_PREFIX)/opt/jpeg-turbo/lib/libjpeg.a
+WEBP_LIBS = $(wildcard $(BREW_PREFIX)/opt/webp/lib/libwebp.a $(BREW_PREFIX)/opt/webp/lib/libsharpyuv.a)
 
 CFLAGS  = -Wall -Wextra -O2 -isysroot $(SDK) -I$(BREW_PREFIX)/opt/libtiff/include -I$(BREW_PREFIX)/opt/zstd/include -I$(BREW_PREFIX)/opt/xz/include -I$(BREW_PREFIX)/opt/jpeg-turbo/include
-LDFLAGS = $(TIFF_LIB) $(ZSTD_LIB) $(LZMA_LIB) $(JPEG_LIB) -lpthread -lz -lcupsimage -lcups
+LDFLAGS = $(TIFF_LIB) $(ZSTD_LIB) $(LZMA_LIB) $(JPEG_LIB) $(WEBP_LIBS) -lpthread -lz -lcupsimage -lcups
 
 # ---- Targets ----
 .PHONY: all build install uninstall probe test print-test clean status revert-stock
