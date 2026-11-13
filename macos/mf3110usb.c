@@ -27,7 +27,6 @@
 
 #define VID 0x04A9
 #define PID 0x2660
-#define WANT_SERIAL "235AT2134669"
 #define DEFAULT_SOCK "/var/run/mf3110usb.sock"
 
 static void logmsg(const char *fmt, ...) {
@@ -531,7 +530,7 @@ int main(int argc, char **argv) {
     }
 
     if (argc == 1) {
-        printf("direct mf3110usb:/Canon/MF3110?serial=%s \"Canon MF3110\" \"Canon MF3110 (CARPS IOKit)\" \"MFG:Canon;MDL:MF3110;CMD:CARPS;CLS:PRINTER;DES:Canon MF3110;\"\n", WANT_SERIAL);
+        printf("direct mf3110usb:/Canon/MF3110 \"Canon MF3110\" \"Canon MF3110 (CARPS IOKit)\" \"MFG:Canon;MDL:MF3110;CMD:CARPS;CLS:PRINTER;DES:Canon MF3110;\"\n");
         return 0;
     }
 

@@ -3,7 +3,8 @@ rastertocarps
 mf3110usb
 carps-decode
 ppd/*.ppd
+*.dSYM
 
-# Temp files
-tmp/*.log
-tmp/*.carps
+# Temp and test files
+tmp/
+decoded-*.pbm

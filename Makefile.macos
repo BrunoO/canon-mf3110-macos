@@ -4,8 +4,8 @@
 
 # ---- Config ----
 PRINTER_NAME   ?= Canon_MF3110
-DEVICE_URI     ?= mf3110usb:/Canon/MF3110?serial=235AT2134669
-STOCK_URI      ?= usb://Canon/MF3110?serial=235AT2134669
+DEVICE_URI     ?= mf3110usb:/Canon/MF3110
+STOCK_URI      ?= usb://Canon/MF3110
 INSTALL_DIR    ?= /Library/Printers/CARPS
 BACKEND_DIR    ?= /usr/libexec/cups/backend
 BACKEND_NAME   ?= mf3110usb
@@ -14,6 +14,7 @@ PLIST_DIR      ?= /Library/LaunchDaemons
 PPD_NAME       ?= mf3110.ppd
 FILTER_NAME    ?= rastertocarps
 SDK            := $(shell xcrun --show-sdk-path)
+MACOS_DIR      ?= ./macos
 WORK_TMP       ?= ./tmp
 
 # Homebrew static libs (no dylibs in CUPS filter sandbox)
@@ -38,8 +39,8 @@ $(FILTER_NAME): rastertocarps.c carps.h
 	@echo "Built $(FILTER_NAME) (no Homebrew dylibs)"
 	@otool -L $@ | grep -i homebrew && echo "WARNING: Homebrew dylib found!" || echo "OK: no Homebrew dylibs"
 
-$(BACKEND_NAME): $(WORK_TMP)/mf3110usb.c
-	clang -O2 -Wall -o $@ $(WORK_TMP)/mf3110usb.c -framework IOKit -framework CoreFoundation
+$(BACKEND_NAME): $(MACOS_DIR)/mf3110usb.c
+	clang -O2 -Wall -o $@ $(MACOS_DIR)/mf3110usb.c -framework IOKit -framework CoreFoundation
 	@echo "Built $(BACKEND_NAME) (IOKit backend)"
 
 ppd/$(PPD_NAME): carps.drv
@@ -63,7 +64,7 @@ install: build
 	sudo install -o root -g wheel -m 700 $(BACKEND_NAME) $(BACKEND_DIR)/$(BACKEND_NAME)
 	@echo "Installing LaunchDaemon $(PLIST_NAME)..."
 	sudo launchctl bootout system/$(basename $(PLIST_NAME)) 2>/dev/null || true
-	sudo install -o root -g wheel -m 644 $(WORK_TMP)/$(PLIST_NAME) $(PLIST_DIR)/$(PLIST_NAME)
+	sudo install -o root -g wheel -m 644 $(MACOS_DIR)/$(PLIST_NAME) $(PLIST_DIR)/$(PLIST_NAME)
 	sudo launchctl bootstrap system $(PLIST_DIR)/$(PLIST_NAME)
 	@echo "Setting up CUPS queue..."
 	sudo lpadmin -p $(PRINTER_NAME) -E -v "$(DEVICE_URI)" -P $(INSTALL_DIR)/$(PPD_NAME) -D "Canon MF3110 (CARPS)" -L "USB" 2>/dev/null || \
