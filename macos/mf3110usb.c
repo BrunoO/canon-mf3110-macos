@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Licensed under the GNU General Public License v3.0 (see LICENSE).
 // mf3110usb: minimal CUPS USB backend for Canon MF3110 (CARPS)
 // Env vars for testing:
 //   MF3110_IFACE=0|1      (default 1)  select printer interface
