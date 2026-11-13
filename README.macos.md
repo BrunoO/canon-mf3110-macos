@@ -8,6 +8,8 @@ Native direct-USB CUPS driver for the **Canon imageCLASS / LaserBase MF3110** (`
 2. **PPD (`mf3110.ppd`):** Generated from `carps.drv` with `ppdc` and patched for `/Library/Printers/CARPS/rastertocarps`, `14.25pt` hardware margins (`4721px` printable width at 600 dpi), and A4 defaults.
 3. **Custom IOKit USB Backend & LaunchDaemon (`macos/mf3110usb.c`):** A persistent root LaunchDaemon (`com.carps.mf3110usb.plist`) listens on `/var/run/mf3110usb.sock` and keeps USB interface 1 (`7/1/2`) open across jobs (avoiding the MF3110 `no-reattach` USB wedge), issuing `GET_DEVICE_ID`, `GET_PORT_STATUS`, and `ClearPipeStallBothEnds` before each job.
 
+See **[macos/ARCHITECTURE.md](macos/ARCHITECTURE.md)** for the full pipeline diagram, USB endpoint layout, and design details.
+
 ## Prerequisites
 
 - Xcode Command Line Tools (`xcode-select --install`)
