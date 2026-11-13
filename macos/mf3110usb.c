@@ -2,13 +2,16 @@
 // Licensed under the GNU General Public License v3.0 (see LICENSE).
 // mf3110usb: minimal CUPS USB backend for Canon MF3110 (CARPS)
 // Env vars for testing:
-//   MF3110_IFACE=0|1      (default 1)  select printer interface
-//   MF3110_CHUNK=N        (default 1=512B; >1=N-byte chunks; 0=64KB)
-//   MF3110_SOFT_RESET=1   (default off) send USB Printer Class SOFT_RESET
-//   MF3110_ZLP=1          (default off) send zero-length packet if total%512==0
-//   MF3110_CLOSE=1        (default off) explicitly close USB interface/device
-//   MF3110_HOLD=N         (default 2)   seconds to hold USB open after write
-//   MF3110_REENUM=1       (default off) re-enumerate USB device before write
+//   MF3110_IFACE=0|1      (default 1)    select printer interface
+//   MF3110_CHUNK=N        (default 4096) N-byte bulk chunks (1=512B, 0=64KB)
+//   MF3110_DELAY_US=N     (default 0)    microseconds between bulk chunks
+//   MF3110_COOLDOWN=N     (default 8)    seconds to hold CUPS job after write
+//   MF3110_SOFT_RESET=1   (default off)  send USB Printer Class SOFT_RESET
+//   MF3110_ZLP=1          (default off)  send zero-length packet if total%512==0
+//   MF3110_CLOSE=1        (default off)  explicitly close USB interface/device
+//   MF3110_HOLD=N         (default 2)    seconds to hold USB open after write (one-shot)
+//   MF3110_REENUM=1       (default off)  re-enumerate USB device before write (one-shot)
+// Daemon:    sudo ./mf3110usb --daemon [/var/run/mf3110usb.sock]
 // One-shot:  sudo ./mf3110usb [--iface0] [--soft-reset] [--zlp] [--close] [--hold N] [--reenum] <file>
 // Probe:     sudo ./mf3110usb probe
 // CUPS:      installed as /usr/libexec/cups/backend/mf3110usb
@@ -31,6 +34,7 @@
 #define PID 0x2660
 #define DEFAULT_SOCK "/var/run/mf3110usb.sock"
 
+// Print a formatted debug message to stderr (captured by CUPS or launchd).
 static void logmsg(const char *fmt, ...) {
     va_list ap;
     fputs("DEBUG: mf3110usb: ", stderr);
@@ -38,6 +42,7 @@ static void logmsg(const char *fmt, ...) {
     fputc('\n', stderr); fflush(stderr);
 }
 
+// Locate the Canon MF3110 (VID/PID) via IOKit and return its device interface, or NULL if absent.
 static IOUSBDeviceInterface **find_device(void) {
     const char *classes[] = { "IOUSBHostDevice", kIOUSBDeviceClassName };
     for (int ci = 0; ci < 2; ci++) {
@@ -64,6 +69,7 @@ static IOUSBDeviceInterface **find_device(void) {
     return NULL;
 }
 
+// Dump all USB configuration interfaces and endpoints for diagnostic probing.
 static int probe(IOUSBDeviceInterface **dev) {
     UInt8 nconf = 0; (*dev)->GetNumberOfConfigurations(dev, &nconf);
     IOUSBConfigurationDescriptorPtr cfg = NULL;
@@ -84,7 +90,7 @@ static int probe(IOUSBDeviceInterface **dev) {
     return 0;
 }
 
-// Check if interface `wantIf` has a classic printer (7/1/1|2) bulk-OUT endpoint
+// Check if interface `wantIf` has a classic printer (7/1/1|2) bulk-OUT endpoint, returning its alt setting.
 static int find_classic(IOUSBDeviceInterface **dev, UInt8 wantIf, UInt8 *alt) {
     IOUSBConfigurationDescriptorPtr cfg = NULL;
     if ((*dev)->GetConfigurationDescriptorPtr(dev, 0, &cfg) != kIOReturnSuccess || !cfg) return 0;
@@ -104,6 +110,7 @@ static int find_classic(IOUSBDeviceInterface **dev, UInt8 wantIf, UInt8 *alt) {
     return 0;
 }
 
+// Seize the USB device and target printer interface, resolving its bulk-OUT and bulk-IN pipe indices.
 static IOUSBInterfaceInterface220 **open_printer_iface(IOUSBDeviceInterface **dev, UInt8 *outPipe, UInt8 *inPipe, UInt8 wantIf) {
     *outPipe = 0; *inPipe = 0;
     IOReturn od = (*dev)->USBDeviceOpenSeize(dev);
@@ -157,6 +164,7 @@ static IOUSBInterfaceInterface220 **open_printer_iface(IOUSBDeviceInterface **de
     return result;
 }
 
+// Issue USB Printer Class control requests (GET_DEVICE_ID, GET_PORT_STATUS, and optional SOFT_RESET).
 static void printer_ctrl_requests(IOUSBInterfaceInterface220 **intf, UInt8 wantIf, int doSoftReset) {
     // 1. USB Printer Class GET_DEVICE_ID (bmRequestType=0xA1, bRequest=0, wValue=0, wIndex=wantIf<<8)
     unsigned char devid[1024];
@@ -218,6 +226,7 @@ static void printer_ctrl_requests(IOUSBInterfaceInterface220 **intf, UInt8 wantI
     }
 }
 
+// One-shot diagnostic mode: open USB directly, write all bytes from `fd`, optionally drain IN, and exit.
 static int send_job(int fd) {
     const char *ifaceEnv = getenv("MF3110_IFACE");
     UInt8 wantIf = ifaceEnv ? (UInt8)atoi(ifaceEnv) : 1;
@@ -320,6 +329,7 @@ static int send_job(int fd) {
     return 0;
 }
 
+// Read all bytes from `fd` and write them to the USB bulk-OUT pipe in fixed `chunkSize` transfers.
 static int write_all_to_pipe(IOUSBInterfaceInterface220 **intf, UInt8 outPipe, int fd, size_t chunkSize) {
     size_t step = (chunkSize > 0) ? chunkSize : 4096;
     int delayUs = getenv("MF3110_DELAY_US") ? atoi(getenv("MF3110_DELAY_US")) : 0;
@@ -355,6 +365,7 @@ static int write_all_to_pipe(IOUSBInterfaceInterface220 **intf, UInt8 outPipe, i
     return 0;
 }
 
+// Persistent LaunchDaemon loop: keep USB interface open across jobs and accept CARPS streams over `sockPath`.
 static int run_daemon(const char *sockPath) {
     signal(SIGPIPE, SIG_IGN);
     const char *ifaceEnv = getenv("MF3110_IFACE");
@@ -370,7 +381,7 @@ static int run_daemon(const char *sockPath) {
     addr.sun_family = AF_UNIX;
     strncpy(addr.sun_path, sockPath, sizeof(addr.sun_path) - 1);
     if (bind(srv, (struct sockaddr *)&addr, sizeof(addr)) < 0) { perror("bind"); close(srv); return 1; }
-    chmod(sockPath, 0666);
+    chmod(sockPath, 0600);
     if (listen(srv, 4) < 0) { perror("listen"); close(srv); return 1; }
     logmsg("daemon: listening on %s", sockPath);
 
@@ -437,6 +448,7 @@ static int run_daemon(const char *sockPath) {
     return 0;
 }
 
+// Client helper: stream `fd` to the running daemon socket and wait for EOF (post-job cooldown).
 static int send_to_socket(const char *sockPath, int fd) {
     int s = socket(AF_UNIX, SOCK_STREAM, 0);
     if (s < 0) { perror("socket"); return 1; }
@@ -463,6 +475,7 @@ static int send_to_socket(const char *sockPath, int fd) {
     return 0;
 }
 
+// Entry point: handles CUPS discovery/backend mode, `--daemon`, `--send`, `probe`, and one-shot file mode.
 int main(int argc, char **argv) {
     const char *daemonSock = NULL;
     const char *sendSock = NULL;

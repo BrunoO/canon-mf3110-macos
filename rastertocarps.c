@@ -150,6 +150,7 @@ void dict_add(u8 byte, u8 *dict) {
 	dict[0] = byte;
 }
 
+/* 0-indexed bit length (floor(log2(n))); named carps_fls to avoid colliding with macOS 1-indexed fls() */
 static int carps_fls(unsigned int n) {
 	int i = 0;
 

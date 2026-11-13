@@ -1,6 +1,6 @@
 #!/bin/bash
 # Clean slate: restart all printer components without rebooting
-# Usage: sudo bash ./tmp/clean-slate.sh
+# Usage: sudo bash ./macos/clean-slate.sh
 set -euo pipefail
 
 PRINTER="Canon_MF3110"
@@ -8,9 +8,8 @@ PRINTER="Canon_MF3110"
 echo "=== Cancelling all jobs ==="
 cancel -a "$PRINTER" 2>/dev/null || true
 
-echo "=== Killing lingering backend processes ==="
-pkill -f mf3110usb 2>/dev/null || true
-pkill -f "backend/usb" 2>/dev/null || true
+echo "=== Restarting mf3110usb LaunchDaemon ==="
+launchctl kickstart -k system/com.carps.mf3110usb 2>/dev/null || pkill -f mf3110usb 2>/dev/null || true
 
 echo "=== Clearing CUPS cache and temp files ==="
 rm -f /private/var/spool/cups/cache/${PRINTER}*

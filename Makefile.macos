@@ -18,12 +18,13 @@ MACOS_DIR      ?= ./macos
 WORK_TMP       ?= ./tmp
 
 # Homebrew static libs (no dylibs in CUPS filter sandbox)
-TIFF_LIB  = /opt/homebrew/opt/libtiff/lib/libtiff.a
-ZSTD_LIB  = /opt/homebrew/opt/zstd/lib/libzstd.a
-LZMA_LIB  = /opt/homebrew/opt/xz/lib/liblzma.a
-JPEG_LIB  = /opt/homebrew/opt/jpeg-turbo/lib/libjpeg.a
+BREW_PREFIX := $(shell brew --prefix 2>/dev/null || echo /opt/homebrew)
+TIFF_LIB  = $(BREW_PREFIX)/opt/libtiff/lib/libtiff.a
+ZSTD_LIB  = $(BREW_PREFIX)/opt/zstd/lib/libzstd.a
+LZMA_LIB  = $(BREW_PREFIX)/opt/xz/lib/liblzma.a
+JPEG_LIB  = $(BREW_PREFIX)/opt/jpeg-turbo/lib/libjpeg.a
 
-CFLAGS  = -Wall -Wextra -O2 -isysroot $(SDK) -I/opt/homebrew/opt/libtiff/include -I/opt/homebrew/opt/zstd/include -I/opt/homebrew/opt/xz/include -I/opt/homebrew/opt/jpeg-turbo/include
+CFLAGS  = -Wall -Wextra -O2 -isysroot $(SDK) -I$(BREW_PREFIX)/opt/libtiff/include -I$(BREW_PREFIX)/opt/zstd/include -I$(BREW_PREFIX)/opt/xz/include -I$(BREW_PREFIX)/opt/jpeg-turbo/include
 LDFLAGS = $(TIFF_LIB) $(ZSTD_LIB) $(LZMA_LIB) $(JPEG_LIB) -lpthread -lz -lcupsimage -lcups
 
 # ---- Targets ----
@@ -40,7 +41,7 @@ $(FILTER_NAME): rastertocarps.c carps.h
 	@otool -L $@ | grep -i homebrew && echo "WARNING: Homebrew dylib found!" || echo "OK: no Homebrew dylibs"
 
 $(BACKEND_NAME): $(MACOS_DIR)/mf3110usb.c
-	clang -O2 -Wall -o $@ $(MACOS_DIR)/mf3110usb.c -framework IOKit -framework CoreFoundation
+	clang -O2 -Wall -Wextra -o $@ $(MACOS_DIR)/mf3110usb.c -framework IOKit -framework CoreFoundation
 	@echo "Built $(BACKEND_NAME) (IOKit backend)"
 
 ppd/$(PPD_NAME): carps.drv
