@@ -1,6 +1,6 @@
 # Canon MF3110 macOS Driver — Architecture & Pipeline
 
-This document describes how the native macOS CUPS driver (`rastertocarps` + `mf3110usb`) works and why each macOS-specific design decision is needed.
+This document describes how the native macOS CUPS driver (`rastertocarps` + stock macOS `usb` backend, with optional `mf3110usb` IOKit fallback) works and why each macOS-specific design decision is needed.
 
 ## 1. Print Pipeline
 
@@ -18,18 +18,18 @@ CUPS 2.3.4 (`cupsd`)
   │  Static-linked CARPS encoder; produces CARPS blocks (`0xCD 0xCA 0x10 ...`)
   │
   ▼  CARPS byte stream (stdout ──► CUPS pipe)
-`/usr/libexec/cups/backend/mf3110usb` (CUPS backend mode, `argc >= 6`, reads `stdin`)
-  │  Connects as client to `/var/run/mf3110usb.sock`, streams CARPS bytes,
-  │  calls `shutdown(s, SHUT_WR)`, and waits for EOF (8s post-job cooldown)
+  ├─► Default (`install`): stock macOS CUPS `usb` backend (`usb://Canon/MF3110...`)
   │
-  ▼  Unix domain socket (`/var/run/mf3110usb.sock`, mode `0600`)
-`mf3110usb --daemon` (`LaunchDaemon`: `/Library/LaunchDaemons/com.carps.mf3110usb.plist`)
-  │  Root daemon keeping IOKit USB handle open across jobs:
-  │  1. Validates existing handle via `GET_PORT_STATUS` (releases stale handles on power-cycle)
-  │  2. Seizes device `0x04a9:0x2660` and interface 1 (`7/1/2`, alt 0)
-  │  3. Runs `GET_DEVICE_ID` + `GET_PORT_STATUS`, then `ClearPipeStallBothEnds` on `outPipe`/`inPipe`
-  │  4. Writes CARPS stream in `4096`-byte `WritePipe` transfers to bulk-OUT `0x04`
-  │  5. Sleeps 8s cooldown before closing client socket
+  └─► Optional fallback (`install-iokit`): `/usr/libexec/cups/backend/mf3110usb` (`argc >= 6`, reads `stdin`)
+        │  Streams CARPS bytes to `/var/run/mf3110usb.sock`, calls `shutdown(SHUT_WR)`, waits for EOF
+        ▼
+      `mf3110usb --daemon` (`LaunchDaemon`: `/Library/LaunchDaemons/com.carps.mf3110usb.plist`)
+        │  1. Validates existing handle via `GET_PORT_STATUS` (releases stale handles on power-cycle)
+        │  2. Seizes device `0x04a9:0x2660` and interface 1 (`7/1/2`, alt 0)
+        │  3. Runs `GET_DEVICE_ID` + `GET_PORT_STATUS`, then `ClearPipeStallBothEnds`
+        │  4. Writes CARPS stream in `4096`-byte `WritePipe` transfers to bulk-OUT `0x04`
+        │  5. Sleeps 8s cooldown before closing client socket
+  │
   ▼
 Canon MF3110 USB Printer (`0x04a9:0x2660`)
 ```
@@ -47,7 +47,7 @@ The Canon MF3110 is a single-mode USB printer (no IPP-over-USB `7/1/4` alternate
 
 ### CUPS Filter Sandbox & Static Linking (`Makefile.macos`)
 macOS CUPS runs filters inside a strict sandbox that blocks loading dynamic libraries from `/opt/homebrew/...` (`dyld: Library not loaded ...`). To avoid runtime sandbox failures:
-- `rastertocarps` is static-linked against Homebrew's `libtiff.a`, `libzstd.a`, `liblzma.a`, and `libjpeg.a` (verified with `otool -L`).
+- `rastertocarps` is static-linked against Homebrew's `libtiff.a`, `libzstd.a`, `liblzma.a`, `libjpeg.a`, and (when present) `libwebp.a` / `libsharpyuv.a` (verified with `otool -L`).
 - Filter and PPD are installed in `/Library/Printers/CARPS/` (avoiding SIP-protected system directories), and `mf3110.ppd` uses an absolute `*cupsFilter` path.
 
 ### `carps_fls()` vs. macOS `<strings.h>` `fls()` (`rastertocarps.c`)
@@ -69,7 +69,7 @@ The Canon MF3110 (`0x04a9:0x2660`) has the CARPS `no-reattach` quirk: closing an
 |------|--------------|---------|
 | `/Library/Printers/CARPS/rastertocarps` | `0755` | Static-linked CARPS raster filter |
 | `/Library/Printers/CARPS/mf3110.ppd` | `0644` | Patched PPD (A4 default, `14.25pt` margins) |
-| `/usr/libexec/cups/backend/mf3110usb` | `0700 root:wheel` | Custom IOKit USB backend & daemon binary |
-| `/Library/LaunchDaemons/com.carps.mf3110usb.plist` | `0644 root:wheel` | LaunchDaemon (`KeepAlive`, `RunAtLoad`) |
-| `/var/run/mf3110usb.sock` | `0600 root:wheel` | Unix socket between CUPS backend and daemon |
-| `/var/log/mf3110usb-daemon.log` | — | Daemon stderr log |
+| `/usr/libexec/cups/backend/mf3110usb` | `0700 root:wheel` | Optional (`install-iokit`): custom IOKit USB backend & daemon |
+| `/Library/LaunchDaemons/com.carps.mf3110usb.plist` | `0644 root:wheel` | Optional (`install-iokit`): LaunchDaemon (`KeepAlive`, `RunAtLoad`) |
+| `/var/run/mf3110usb.sock` | `0600 root:wheel` | Optional (`install-iokit`): Unix socket between CUPS backend and daemon |
+| `/var/log/mf3110usb-daemon.log` | — | Optional (`install-iokit`): daemon stderr log |

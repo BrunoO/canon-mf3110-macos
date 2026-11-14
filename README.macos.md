@@ -4,7 +4,7 @@ Native direct-USB CUPS driver for the **Canon imageCLASS / LaserBase MF3110** (`
 
 ## Architecture
 
-1. **CUPS Filter (`rastertocarps`):** Static-linked against Homebrew's `libtiff`, `zstd`, `xz`, and `jpeg-turbo` so it runs cleanly inside the macOS CUPS filter sandbox without dynamic library load errors. Upstream's `0`-indexed `fls()` (`floor(log2(n))`) is renamed to `carps_fls()` in `rastertocarps.c` to avoid colliding with macOS `<strings.h>` `fls(int)`, which is `1`-indexed and otherwise corrupts `encode_number()` run-lengths `>= 2` (causing non-trivial pages such as macOS GUI print jobs to silently wedge the printer).
+1. **CUPS Filter (`rastertocarps`):** Static-linked against Homebrew's `libtiff`, `zstd`, `xz`, `jpeg-turbo`, and `webp` so it runs cleanly inside the macOS CUPS filter sandbox without dynamic library load errors. Upstream's `0`-indexed `fls()` (`floor(log2(n))`) is renamed to `carps_fls()` in `rastertocarps.c` to avoid colliding with macOS `<strings.h>` `fls(int)`, which is `1`-indexed and otherwise corrupts `encode_number()` run-lengths `>= 2` (causing non-trivial pages such as macOS GUI print jobs to silently wedge the printer).
 2. **PPD (`mf3110.ppd`):** Generated from `carps.drv` with `ppdc` and patched for `/Library/Printers/CARPS/rastertocarps`, `14.25pt` hardware margins (`4721px` printable width at 600 dpi), and A4 defaults.
 3. **USB Backend:** Uses macOS's stock CUPS `usb` backend (`usb://Canon/MF3110...`) by default. An optional custom IOKit USB backend + `LaunchDaemon` (`macos/mf3110usb.c` / `com.carps.mf3110usb.plist`) is also included via `make -f Makefile.macos install-iokit` for setups where the printer hits the `no-reattach` USB lockup across jobs.
 
