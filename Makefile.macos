@@ -30,7 +30,7 @@ CFLAGS  = -Wall -Wextra -O2 -isysroot $(SDK) -I$(BREW_PREFIX)/opt/libtiff/includ
 LDFLAGS = $(TIFF_LIB) $(ZSTD_LIB) $(LZMA_LIB) $(JPEG_LIB) $(WEBP_LIBS) -lpthread -lz -lcupsimage -lcups
 
 # ---- Targets ----
-.PHONY: all build install uninstall probe test print-test clean status revert-stock
+.PHONY: all build install install-iokit uninstall probe test print-test clean status revert-stock
 
 all: build
 
@@ -61,11 +61,26 @@ ppd/$(PPD_NAME): carps.drv
 	@echo "Generated PPDs (patched cupsFilter, 14.25pt margins, A4 default)"
 
 install: build
+	@echo "Ensuring optional mf3110usb LaunchDaemon is stopped..."
+	sudo launchctl bootout system/$(basename $(PLIST_NAME)) 2>/dev/null || true
 	@echo "Installing filter + PPD to $(INSTALL_DIR)..."
 	sudo mkdir -p $(INSTALL_DIR)
 	sudo install -m 755 $(BUILD_DIR)/$(FILTER_NAME) $(INSTALL_DIR)/$(FILTER_NAME)
 	sudo install -m 644 ppd/$(PPD_NAME) $(INSTALL_DIR)/$(PPD_NAME)
-	@echo "Installing backend to $(BACKEND_DIR)..."
+	@URI=$$(lpinfo -v 2>/dev/null | awk '/usb:\/\/Canon\/MF3110/{print $$2; exit}'); \
+	if [ -z "$$URI" ]; then URI="$(STOCK_URI)"; fi; \
+	echo "Setting up CUPS queue ($(PRINTER_NAME) -> $$URI)..."; \
+	sudo lpadmin -p $(PRINTER_NAME) -E -v "$$URI" -P $(INSTALL_DIR)/$(PPD_NAME) -D "Canon MF3110 (CARPS)" -L "USB" 2>/dev/null || \
+		sudo lpadmin -p $(PRINTER_NAME) -v "$$URI" -P $(INSTALL_DIR)/$(PPD_NAME); \
+	sudo lpadmin -p $(PRINTER_NAME) -o PageSize=A4 -o media=A4; \
+	echo "Install complete (stock macOS USB backend). Queue: $(PRINTER_NAME) -> $$URI"
+
+install-iokit: build
+	@echo "Installing filter + PPD to $(INSTALL_DIR)..."
+	sudo mkdir -p $(INSTALL_DIR)
+	sudo install -m 755 $(BUILD_DIR)/$(FILTER_NAME) $(INSTALL_DIR)/$(FILTER_NAME)
+	sudo install -m 644 ppd/$(PPD_NAME) $(INSTALL_DIR)/$(PPD_NAME)
+	@echo "Installing custom IOKit backend to $(BACKEND_DIR)..."
 	sudo install -o root -g wheel -m 700 $(BUILD_DIR)/$(BACKEND_NAME) $(BACKEND_DIR)/$(BACKEND_NAME)
 	@echo "Installing LaunchDaemon $(PLIST_NAME)..."
 	sudo launchctl bootout system/$(basename $(PLIST_NAME)) 2>/dev/null || true
@@ -75,7 +90,7 @@ install: build
 	sudo lpadmin -p $(PRINTER_NAME) -E -v "$(DEVICE_URI)" -P $(INSTALL_DIR)/$(PPD_NAME) -D "Canon MF3110 (CARPS)" -L "USB" 2>/dev/null || \
 		sudo lpadmin -p $(PRINTER_NAME) -v "$(DEVICE_URI)" -P $(INSTALL_DIR)/$(PPD_NAME)
 	sudo lpadmin -p $(PRINTER_NAME) -o PageSize=A4 -o media=A4
-	@echo "Install complete. Queue: $(PRINTER_NAME) -> $(DEVICE_URI)"
+	@echo "Install complete (custom IOKit daemon). Queue: $(PRINTER_NAME) -> $(DEVICE_URI)"
 
 uninstall:
 	@echo "Removing LaunchDaemon and installed files..."

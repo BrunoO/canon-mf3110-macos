@@ -6,7 +6,7 @@ Native direct-USB CUPS driver for the **Canon imageCLASS / LaserBase MF3110** (`
 
 1. **CUPS Filter (`rastertocarps`):** Static-linked against Homebrew's `libtiff`, `zstd`, `xz`, and `jpeg-turbo` so it runs cleanly inside the macOS CUPS filter sandbox without dynamic library load errors. Upstream's `0`-indexed `fls()` (`floor(log2(n))`) is renamed to `carps_fls()` in `rastertocarps.c` to avoid colliding with macOS `<strings.h>` `fls(int)`, which is `1`-indexed and otherwise corrupts `encode_number()` run-lengths `>= 2` (causing non-trivial pages such as macOS GUI print jobs to silently wedge the printer).
 2. **PPD (`mf3110.ppd`):** Generated from `carps.drv` with `ppdc` and patched for `/Library/Printers/CARPS/rastertocarps`, `14.25pt` hardware margins (`4721px` printable width at 600 dpi), and A4 defaults.
-3. **Custom IOKit USB Backend & LaunchDaemon (`macos/mf3110usb.c`):** A persistent root LaunchDaemon (`com.carps.mf3110usb.plist`) listens on `/var/run/mf3110usb.sock` and keeps USB interface 1 (`7/1/2`) open across jobs (avoiding the MF3110 `no-reattach` USB wedge), issuing `GET_DEVICE_ID`, `GET_PORT_STATUS`, and `ClearPipeStallBothEnds` before each job.
+3. **USB Backend:** Uses macOS's stock CUPS `usb` backend (`usb://Canon/MF3110...`) by default. An optional custom IOKit USB backend + `LaunchDaemon` (`macos/mf3110usb.c` / `com.carps.mf3110usb.plist`) is also included via `make -f Makefile.macos install-iokit` for setups where the printer hits the `no-reattach` USB lockup across jobs.
 
 See **[macos/ARCHITECTURE.md](macos/ARCHITECTURE.md)** for the full pipeline diagram, USB endpoint layout, and design details.
 
@@ -28,8 +28,14 @@ Or run the targets individually:
 
 ```sh
 make -f Makefile.macos build
-make -f Makefile.macos install
+make -f Makefile.macos install        # stock macOS USB backend (recommended)
 make -f Makefile.macos print-test
+```
+
+If you encounter USB lockups on consecutive jobs (`no-reattach`), you can switch to the optional persistent IOKit backend:
+
+```sh
+make -f Makefile.macos install-iokit
 ```
 
 ## Uninstall
